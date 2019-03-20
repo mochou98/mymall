@@ -1,0 +1,162 @@
+package org.mochou.mymall.wx.web;
+
+import com.github.pagehelper.PageInfo;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.mochou.mymall.core.util.ResponseUtil;
+import org.mochou.mymall.db.domain.MymallComment;
+import org.mochou.mymall.db.service.MymallCommentService;
+import org.mochou.mymall.db.service.MymallGoodsService;
+import org.mochou.mymall.db.service.MymallTopicService;
+import org.mochou.mymall.db.service.MymallUserService;
+import org.mochou.mymall.wx.annotation.LoginUser;
+import org.mochou.mymall.wx.dao.UserInfo;
+import org.mochou.mymall.wx.service.UserInfoService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+
+import javax.validation.constraints.NotNull;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 用户评论服务
+ */
+@RestController
+@RequestMapping("/wx/comment")
+@Validated
+public class WxCommentController {
+    private final Log logger = LogFactory.getLog(WxCommentController.class);
+
+    @Autowired
+    private MymallCommentService commentService;
+    @Autowired
+    private MymallUserService userService;
+    @Autowired
+    private UserInfoService userInfoService;
+    @Autowired
+    private MymallGoodsService goodsService;
+    @Autowired
+    private MymallTopicService topicService;
+
+    private Object validate(MymallComment comment) {
+        String content = comment.getContent();
+        if (StringUtils.isEmpty(content)) {
+            return ResponseUtil.badArgument();
+        }
+
+        Short star = comment.getStar();
+        if (star == null) {
+            return ResponseUtil.badArgument();
+        }
+        if (star < 0 || star > 5) {
+            return ResponseUtil.badArgumentValue();
+        }
+
+        Byte type = comment.getType();
+        Integer valueId = comment.getValueId();
+        if (type == null || valueId == null) {
+            return ResponseUtil.badArgument();
+        }
+        if (type == 0) {
+            if (goodsService.findById(valueId) == null) {
+                return ResponseUtil.badArgumentValue();
+            }
+        } else if (type == 1) {
+            if (topicService.findById(valueId) == null) {
+                return ResponseUtil.badArgumentValue();
+            }
+        } else {
+            return ResponseUtil.badArgumentValue();
+        }
+        Boolean hasPicture = comment.getHasPicture();
+        if (hasPicture == null || !hasPicture) {
+            comment.setPicUrls(new String[0]);
+        }
+        return null;
+    }
+
+    /**
+     * 发表评论
+     *
+     * @param userId  用户ID
+     * @param comment 评论内容
+     * @return 发表评论操作结果
+     */
+    @PostMapping("post")
+    public Object post(@LoginUser Integer userId, @RequestBody MymallComment comment) {
+        if (userId == null) {
+            return ResponseUtil.unlogin();
+        }
+        Object error = validate(comment);
+        if (error != null) {
+            return error;
+        }
+
+        comment.setUserId(userId);
+        commentService.save(comment);
+        return ResponseUtil.ok(comment);
+    }
+
+    /**
+     * 评论数量
+     *
+     * @param type    类型ID。 如果是0，则查询商品评论；如果是1，则查询专题评论。
+     * @param valueId 商品或专题ID。如果type是0，则是商品ID；如果type是1，则是专题ID。
+     * @return 评论数量
+     */
+    @GetMapping("count")
+    public Object count(@NotNull Byte type, @NotNull Integer valueId) {
+        int allCount = commentService.count(type, valueId, 0);
+        int hasPicCount = commentService.count(type, valueId, 1);
+        Map<String, Object> data = new HashMap<String, Object>();
+        data.put("allCount", allCount);
+        data.put("hasPicCount", hasPicCount);
+        return ResponseUtil.ok(data);
+    }
+
+    /**
+     * 评论列表
+     *
+     * @param type     类型ID。 如果是0，则查询商品评论；如果是1，则查询专题评论。
+     * @param valueId  商品或专题ID。如果type是0，则是商品ID；如果type是1，则是专题ID。
+     * @param showType 显示类型。如果是0，则查询全部；如果是1，则查询有图片的评论。
+     * @param page     分页页数
+     * @param size     分页大小
+     * @return 评论列表
+     */
+    @GetMapping("list")
+    public Object list(@NotNull Byte type,
+                       @NotNull Integer valueId,
+                       @NotNull Integer showType,
+                       @RequestParam(defaultValue = "1") Integer page,
+                       @RequestParam(defaultValue = "10") Integer size) {
+        List<MymallComment> commentList = commentService.query(type, valueId, showType, page, size);
+        long count = PageInfo.of(commentList).getTotal();
+
+        List<Map<String, Object>> commentVoList = new ArrayList<>(commentList.size());
+        for (MymallComment comment : commentList) {
+            Map<String, Object> commentVo = new HashMap<>();
+            commentVo.put("addTime", comment.getAddTime());
+            commentVo.put("content", comment.getContent());
+            commentVo.put("picList", comment.getPicUrls());
+
+            UserInfo userInfo = userInfoService.getInfo(comment.getUserId());
+            commentVo.put("userInfo", userInfo);
+
+            String reply = commentService.queryReply(comment.getId());
+            commentVo.put("reply", reply);
+
+            commentVoList.add(commentVo);
+        }
+        Map<String, Object> data = new HashMap<String, Object>();
+        data.put("data", commentVoList);
+        data.put("count", count);
+        data.put("currentPage", page);
+        return ResponseUtil.ok(data);
+    }
+}

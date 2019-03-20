@@ -1,0 +1,16 @@
+spring:
+  profiles:
+    active: db, core, admin
+  messages:
+    encoding: UTF-8
+
+server:
+  port: 8083
+
+logging:
+  level:
+    root:  ERROR
+    org.springframework:  ERROR
+    org.mybatis:  ERROR
+    org.mochou.mymall.admin:  DEBUG
+    org.mochou.mymall:  ERROR
