@@ -34,16 +34,6 @@
             </el-dropdown-item>
           </router-link>
           <el-dropdown-item divided>
-            <a target="_blank" href="https://github.com/linlinjava/mymall">
-              GitHub
-            </a>
-          </el-dropdown-item>
-          <el-dropdown-item>
-            <a target="_blank" href="https://gitee.com/linlinjava/mymall">
-              码云
-            </a>
-          </el-dropdown-item>
-          <el-dropdown-item divided>
             <router-link to="/profile/password">
               密码修改
             </router-link>
